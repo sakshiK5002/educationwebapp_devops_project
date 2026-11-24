@@ -1,0 +1,131 @@
+
+pipeline {
+    agent any
+
+    tools {
+        maven 'Maven'
+        jdk 'JDK17'
+    }
+
+    environment {
+        DOCKER_IMAGE = 'nanducjc123/educationapprepo'
+        SONAR_HOST = 'http://13.50.232.101:9000'
+        EKS_CLUSTER = 'YOUR_EKS_CLUSTER_NAME'
+        AWS_DEFAULT_REGION = 'eu-north-1'
+        NAMESPACE = 'education'
+    }
+
+    stages {
+
+        stage('Git Checkout') {
+            steps {
+                git branch: 'master',
+                    url: 'https://github.com/cjcnkolhe/educationapp.git'
+            }
+        }
+
+        stage('Maven Build') {
+            steps {
+                sh 'mvn clean package'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'sonar-token',
+                    variable: 'SONAR_TOKEN')
+                ]) {
+                    sh '''
+                        mvn sonar:sonar \
+                        -Dsonar.projectKey=educationapp \
+                        -Dsonar.host.url=$SONAR_HOST \
+                        -Dsonar.token=$SONAR_TOKEN
+                    '''
+                }
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                sh '''
+                    docker build -t $DOCKER_IMAGE:$BUILD_NUMBER .
+                '''
+            }
+        }
+
+        stage('Docker Push') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-credentials',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )
+                ]) {
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login \
+                        -u "$DOCKER_USER" --password-stdin
+
+                        docker push $DOCKER_IMAGE:$BUILD_NUMBER
+
+                        docker logout
+                    '''
+                }
+            }
+        }
+
+        stage('Connect to EKS') {
+            steps {
+                sh '''
+                    aws eks update-kubeconfig \
+                    --region $AWS_DEFAULT_REGION \
+                    --name $EKS_CLUSTER
+
+                    kubectl get nodes
+                '''
+            }
+        }
+
+        stage('Deploy on EKS') {
+            steps {
+                sh '''
+                    kubectl apply -f k8s/namespace.yml
+
+                    kubectl apply -f k8s/deployment.yaml
+
+                    kubectl apply -f k8s/service.yaml
+
+                    kubectl set image deployment/educationapp \
+                    educationapp=$DOCKER_IMAGE:$BUILD_NUMBER \
+                    -n $NAMESPACE
+
+                    kubectl rollout status deployment/educationapp \
+                    -n $NAMESPACE
+                '''
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                sh '''
+                    kubectl get pods -n $NAMESPACE
+
+                    kubectl get deployments -n $NAMESPACE
+
+                    kubectl get services -n $NAMESPACE
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'EducationApp deployed successfully on EKS!'
+        }
+
+        failure {
+            echo 'EducationApp deployment failed!'
+        }
+    }
+}
