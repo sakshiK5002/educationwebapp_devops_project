@@ -18,8 +18,8 @@ pipeline {
 
         stage('Git Checkout') {
             steps {
-                git branch: 'master',
-                    url: 'https://github.com/cjcnkolhe/educationapp.git'
+                git branch: 'main',
+                    url: 'https://github.com/sakshiK5002/educationwebapp_devops_project.git'
             }
         }
 
@@ -61,7 +61,7 @@ pipeline {
                 withCredentials([
                     usernamePassword(
                         credentialsId: 'dockerhub-credentials',
-                        usernameVariable: 'DOCKER_USER',
+                        usernameVariable: 'dockerlogin',
                         passwordVariable: 'DOCKER_PASS'
                     )
                 ]) {
