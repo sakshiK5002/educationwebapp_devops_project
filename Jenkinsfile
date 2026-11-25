@@ -9,7 +9,7 @@ pipeline {
 
     environment {
         DOCKER_IMAGE = 'sakshi0716/aws-devops-project-repo'
-        SONAR_HOST = 'http://3.109.216.110:9000'
+        SONAR_HOST = 'http://43.205.112.52:9000'
         CONTAINER_NAME = 'educationapp'
         APP_PORT = '8080'
     }
